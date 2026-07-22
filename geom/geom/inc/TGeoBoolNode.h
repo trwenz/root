@@ -14,6 +14,7 @@
 
 #include "TGeoShape.h"
 
+#include <algorithm>
 #include <mutex>
 #include <vector>
 
@@ -24,23 +25,30 @@ class TGeoHMatrix;
 
 class TGeoBoolNode : public TObject {
    static std::atomic<UInt_t> fgInstanceCount;
-   UInt_t fIndex;
+   UInt_t fIndex; //! dense index into per-thread data
 public:
-   enum EGeoBoolType { kGeoUnion, kGeoIntersection, kGeoSubtraction };
-  /* struct ThreadData_t {
-      Int_t fSelected; // ! selected branch
+   enum EGeoBoolType {
+      kGeoUnion,
+      kGeoIntersection,
+      kGeoSubtraction
+   };
+   /* struct ThreadData_t {
+       Int_t fSelected; // ! selected branch
 
-      ThreadData_t();
-      ~ThreadData_t();
-   };*/
-   struct ThreadData_t { Int_t fSelected = 0; };
+       ThreadData_t();
+       ~ThreadData_t();
+    };*/
+   struct ThreadData_t {
+      Int_t fSelected = 0;
+   };
 
-   ThreadData_t &GetThreadData() const{
-	thread_local std::vector<ThreadData_t> tdata;
-	if(tdata.size() <= fIndex){
-	   tdata.resize(fgInstanceCount.load(std::memory_order_relaxed));
-	}
-	return tdata[fIndex];
+   ThreadData_t &GetThreadData() const
+   {
+      thread_local std::vector<ThreadData_t> tdata;
+      if (tdata.size() <= fIndex) {
+         tdata.resize(std::max<size_t>(fgInstanceCount.load(std::memory_order_relaxed), fIndex + 1));
+      }
+      return tdata[fIndex];
    }
    void ClearThreadData() const;
    void CreateThreadData(Int_t nthreads);
@@ -99,7 +107,7 @@ public:
    void SetSelected(Int_t sel);
    virtual void Sizeof3D() const;
 
-   ClassDefOverride(TGeoBoolNode, 2) // a boolean node
+   ClassDefOverride(TGeoBoolNode, 3) // a boolean node
 };
 
 /// Boolean node representing a union between two components.

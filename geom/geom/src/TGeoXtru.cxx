@@ -101,6 +101,7 @@ Double_t y0, Double_t scale);
 #include "TGeoManager.h"
 #include "TGeoVolume.h"
 #include "TGeoPolygon.h"
+#include "TROOT.h"
 
 ClassImp(TGeoXtru);
 
@@ -113,7 +114,16 @@ TGeoXtru::ThreadData_t::~ThreadData_t()
 {
    delete[] fXc;
    delete[] fYc;
-   delete fPoly;
+   // fPoly is a TObject; deleting it recurses through ROOT's collection machinery
+   // (TObjArray::Delete -> ROOT::gCoreMutex / TCollection::GarbageCollect). Because this
+   // scratch lives in a thread_local vector, it can be destroyed at process/thread exit
+   // AFTER ROOT's core globals have already been torn down, where that machinery reads
+   // freed state and corrupts the heap. Only delete while ROOT is still alive; at shutdown
+   // the OS reclaims this small per-thread buffer anyway. Note the in-run reinitialization
+   // path (move-assignment in InitThreadSlot) deletes fPoly directly while ROOT is alive, so
+   // this guard only ever skips the very last teardown, not steady-state churn.
+   if (fPoly && ROOT::Internal::gROOTLocal)
+      delete fPoly;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

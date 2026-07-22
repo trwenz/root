@@ -821,10 +821,15 @@ TGeoNavigator *TGeoManager::GetCurrentNavigator() const
    if (nav)
       return nav;
    std::thread::id threadId = std::this_thread::get_id();
+   // AddNavigator() mutates fNavigators under fgMutex; this reader must take the same
+   // lock or a concurrent insert corrupts the map (heap corruption / crash). The TLS
+   // cache above means this lock is taken at most once per thread (first call only).
+   fgMutex.lock();
    NavigatorsMap_t::const_iterator it = fNavigators.find(threadId);
-   if (it == fNavigators.end())
+   TGeoNavigatorArray *array = (it == fNavigators.end()) ? nullptr : it->second;
+   fgMutex.unlock();
+   if (!array)
       return nullptr;
-   TGeoNavigatorArray *array = it->second;
    nav = array->GetCurrentNavigator();
    tnav = nav; // TTHREAD_TLS_SET(TGeoNavigator*,tnav,nav);
    return nav;

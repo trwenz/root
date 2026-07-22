@@ -60,6 +60,12 @@ std::atomic<UInt_t> TGeoPatternFinder::fgInstanceCount = 0;
 
 void TGeoPatternFinder::InitThreadSlot(ThreadData_t &td) const
 {
+   // CreateMatrix() registers the new matrix with the geometry manager, which mutates a
+   // shared (unlocked) TObjArray. With the lazy, per-thread initialization several threads
+   // can reach this on first touch concurrently, so serialize the registration globally.
+   // This lock is taken only once per (thread, finder); steady-state navigation is lock-free.
+   static std::mutex sInitMutex;
+   std::lock_guard<std::mutex> guard(sInitMutex);
    td.fMatrix = CreateMatrix();
    td.fCurrent = -1;
    td.fNextIndex = -1;

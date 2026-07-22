@@ -14,6 +14,7 @@
 
 #include "TGeoPcon.h"
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <vector>
@@ -42,7 +43,7 @@ public:
    {
       thread_local std::vector<ThreadData_t> tdata;
       if (tdata.size() <= fIndex)
-         tdata.resize(fgInstanceCount.load(std::memory_order_relaxed));
+         tdata.resize(std::max<size_t>(fgInstanceCount.load(std::memory_order_relaxed), fIndex + 1));
       ThreadData_t &td = tdata[fIndex];
       if (td.fInitGen != fGeneration)
          InitThreadSlot(td);

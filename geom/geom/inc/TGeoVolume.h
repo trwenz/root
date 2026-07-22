@@ -21,6 +21,7 @@
 #include "TObjArray.h"
 #include "TGeoMedium.h"
 #include "TGeoShape.h"
+#include <algorithm>
 #include <mutex>
 #include <vector>
 
@@ -205,7 +206,7 @@ public:
    void RemoveNode(TGeoNode *node);
    TGeoNode *ReplaceNode(TGeoNode *nodeorig, TGeoShape *newshape = nullptr, TGeoMatrix *newpos = nullptr,
                          TGeoMedium *newmed = nullptr);
-   void ResetTransparency(Char_t transparency = -1); // *MENU*
+   void ResetTransparency(Char_t transparency = -1);                             // *MENU*
    void SaveAs(const char *filename = "", Option_t *option = "") const override; // *MENU*
    void SavePrimitive(std::ostream &out, Option_t *option = "") override;
    void SelectVolume(Bool_t clear = kFALSE);
@@ -253,7 +254,7 @@ public:
    Double_t Weight(Double_t precision = 0.01, Option_t *option = "va"); // *MENU*
    Double_t WeightA() const;
 
-   ClassDefOverride(TGeoVolume, 7)              // geometry volume descriptor
+   ClassDefOverride(TGeoVolume, 7) // geometry volume descriptor
 };
 
 ////////////////////////////////////////////////////////////////////////////
@@ -315,12 +316,12 @@ public:
 
 class TGeoVolumeAssembly : public TGeoVolume {
    static std::atomic<UInt_t> fgInstanceCount;
-   UInt_t fIndex;
+   UInt_t fIndex; //! per thread data index
 
 public:
    struct ThreadData_t {
-      Int_t fCurrent = 0; //! index of current selected node
-      Int_t fNext = 0;    //! index of next node to be entered
+      Int_t fCurrent = -1; //! index of current selected node
+      Int_t fNext = -1;    //! index of next node to be entered
 
       /*ThreadData_t();
       ~ThreadData_t();*/
@@ -330,7 +331,7 @@ public:
    {
       thread_local std::vector<ThreadData_t> tdata;
       if (tdata.size() <= fIndex) {
-         tdata.resize(fgInstanceCount.load(std::memory_order_relaxed));
+         tdata.resize(std::max<size_t>(fgInstanceCount.load(std::memory_order_relaxed), fIndex + 1));
       }
       return tdata[fIndex];
    }
@@ -367,7 +368,7 @@ public:
    Bool_t IsVisible() const override { return kFALSE; }
    static TGeoVolumeAssembly *MakeAssemblyFromVolume(TGeoVolume *vol);
 
-   ClassDefOverride(TGeoVolumeAssembly, 3) // an assembly of volumes
+   ClassDefOverride(TGeoVolumeAssembly, 4) // an assembly of volumes
 };
 
 inline Int_t TGeoVolume::GetNdaughters() const
@@ -380,13 +381,14 @@ inline Int_t TGeoVolume::GetNdaughters() const
 inline Char_t TGeoVolume::GetTransparency() const
 {
    // If the transparency is (-1), the old default handling is applied
-   if ( fTransparency >= 0 ) return fTransparency;
+   if (fTransparency >= 0)
+      return fTransparency;
    return !fMedium ? 0 : fMedium->GetMaterial()->GetTransparency();
 }
 
 inline void TGeoVolume::SetTransparency(Char_t transparency)
 {
-   if (fMedium)  {
+   if (fMedium) {
       fMedium->GetMaterial()->SetTransparency(transparency);
    }
 }
