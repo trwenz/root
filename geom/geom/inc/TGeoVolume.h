@@ -314,16 +314,31 @@ public:
 ////////////////////////////////////////////////////////////////////////////
 
 class TGeoVolumeAssembly : public TGeoVolume {
+   static std::atomic<UInt_t> fgInstanceCount;
+   UInt_t fIndex;
+
 public:
    struct ThreadData_t {
-      Int_t fCurrent; //! index of current selected node
-      Int_t fNext;    //! index of next node to be entered
+      Int_t fCurrent = 0; //! index of current selected node
+      Int_t fNext = 0;    //! index of next node to be entered
 
-      ThreadData_t();
-      ~ThreadData_t();
+      /*ThreadData_t();
+      ~ThreadData_t();*/
    };
 
-   ThreadData_t &GetThreadData() const;
+   ThreadData_t &GetThreadData() const
+   {
+      thread_local std::vector<ThreadData_t> tdata;
+      if (tdata.size() <= fIndex) {
+         tdata.resize(fgInstanceCount.load(std::memory_order_relaxed));
+      }
+      return tdata[fIndex];
+   }
+   inline Int_t GetCurrentNodeIndex() const override { return GetThreadData().fCurrent; }
+   inline Int_t GetNextNodeIndex() const override { return GetThreadData().fNext; }
+   inline void SetCurrentNodeIndex(Int_t index) { GetThreadData().fCurrent = index; }
+   inline void SetNextNodeIndex(Int_t index) { GetThreadData().fNext = index; }
+
    void ClearThreadData() const override;
    void CreateThreadData(Int_t nthreads) override;
 
@@ -348,15 +363,11 @@ public:
                       Option_t *option = "") override;
    TGeoVolume *Divide(TGeoVolume *cell, TGeoPatternFinder *pattern, Option_t *option = "spacedout");
    void DrawOnly(Option_t *) override {}
-   Int_t GetCurrentNodeIndex() const override;
-   Int_t GetNextNodeIndex() const override;
    Bool_t IsAssembly() const override { return kTRUE; }
    Bool_t IsVisible() const override { return kFALSE; }
    static TGeoVolumeAssembly *MakeAssemblyFromVolume(TGeoVolume *vol);
-   void SetCurrentNodeIndex(Int_t index);
-   void SetNextNodeIndex(Int_t index);
 
-   ClassDefOverride(TGeoVolumeAssembly, 2) // an assembly of volumes
+   ClassDefOverride(TGeoVolumeAssembly, 3) // an assembly of volumes
 };
 
 inline Int_t TGeoVolume::GetNdaughters() const

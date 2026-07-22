@@ -23,15 +23,25 @@ class TGeoMatrix;
 class TGeoHMatrix;
 
 class TGeoBoolNode : public TObject {
+   static std::atomic<UInt_t> fgInstanceCount;
+   UInt_t fIndex;
 public:
    enum EGeoBoolType { kGeoUnion, kGeoIntersection, kGeoSubtraction };
-   struct ThreadData_t {
+  /* struct ThreadData_t {
       Int_t fSelected; // ! selected branch
 
       ThreadData_t();
       ~ThreadData_t();
-   };
-   ThreadData_t &GetThreadData() const;
+   };*/
+   struct ThreadData_t { Int_t fSelected = 0; };
+
+   ThreadData_t &GetThreadData() const{
+	thread_local std::vector<ThreadData_t> tdata;
+	if(tdata.size() <= fIndex){
+	   tdata.resize(fgInstanceCount.load(std::memory_order_relaxed));
+	}
+	return tdata[fIndex];
+   }
    void ClearThreadData() const;
    void CreateThreadData(Int_t nthreads);
 
@@ -89,7 +99,7 @@ public:
    void SetSelected(Int_t sel);
    virtual void Sizeof3D() const;
 
-   ClassDefOverride(TGeoBoolNode, 1) // a boolean node
+   ClassDefOverride(TGeoBoolNode, 2) // a boolean node
 };
 
 /// Boolean node representing a union between two components.

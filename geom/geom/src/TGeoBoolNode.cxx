@@ -43,42 +43,21 @@ implementations for Boolean nodes are:
   - TGeoIntersection - representing the Boolean intersection of two positioned shapes
 */
 
+std::atomic<UInt_t> TGeoBoolNode::fgInstanceCount = 0;
+
 ClassImp(TGeoBoolNode);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TGeoBoolNode::ThreadData_t::ThreadData_t() : fSelected(0) {}
+// TGeoBoolNode::ThreadData_t::ThreadData_t() : fSelected(0) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Destructor.
 
-TGeoBoolNode::ThreadData_t::~ThreadData_t() {}
+// TGeoBoolNode::ThreadData_t::~ThreadData_t() {}
 
 ////////////////////////////////////////////////////////////////////////////////
-
-TGeoBoolNode::ThreadData_t &TGeoBoolNode::GetThreadData() const
-{
-   Int_t tid = TGeoManager::ThreadId();
-   /*
-      std::lock_guard<std::mutex> guard(fMutex);
-      if (tid >= fThreadSize) {
-         Error("GetThreadData", "Thread id=%d bigger than maximum declared thread number %d. \nUse
-      TGeoManager::SetMaxThreads properly !!!", tid, fThreadSize);
-      }
-      if (tid >= fThreadSize)
-      {
-         fThreadData.resize(tid + 1);
-         fThreadSize = tid + 1;
-      }
-      if (fThreadData[tid] == 0)
-      {
-      if (fThreadData[tid] == 0)
-         fThreadData[tid] = new ThreadData_t;
-      }
-   */
-   return *fThreadData[tid];
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -135,6 +114,7 @@ TGeoBoolNode::TGeoBoolNode()
    fPoints = nullptr;
    fThreadSize = 0;
    CreateThreadData(1);
+   fIndex = fgInstanceCount++;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -150,6 +130,7 @@ TGeoBoolNode::TGeoBoolNode(const char *expr1, const char *expr2)
    fPoints = nullptr;
    fThreadSize = 0;
    CreateThreadData(1);
+   fIndex = fgInstanceCount++;
    if (!MakeBranch(expr1, kTRUE)) {
       return;
    }
@@ -170,6 +151,7 @@ TGeoBoolNode::TGeoBoolNode(TGeoShape *left, TGeoShape *right, TGeoMatrix *lmat, 
    fPoints = nullptr;
    fThreadSize = 0;
    CreateThreadData(1);
+   fIndex = fgInstanceCount++;
    if (!fLeftMat)
       fLeftMat = gGeoIdentity;
    else

@@ -2861,23 +2861,24 @@ void TGeoVolumeMulti::SetVisibility(Bool_t vis)
 
 ClassImp(TGeoVolumeAssembly);
 
+std::atomic<UInt_t> TGeoVolumeAssembly::fgInstanceCount = 0;
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TGeoVolumeAssembly::ThreadData_t::ThreadData_t() : fCurrent(-1), fNext(-1) {}
+// TGeoVolumeAssembly::ThreadData_t::ThreadData_t() : fCurrent(-1), fNext(-1) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Destructor.
 
-TGeoVolumeAssembly::ThreadData_t::~ThreadData_t() {}
+// TGeoVolumeAssembly::ThreadData_t::~ThreadData_t() {}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGeoVolumeAssembly::ThreadData_t &TGeoVolumeAssembly::GetThreadData() const
+/*TGeoVolumeAssembly::ThreadData_t &TGeoVolumeAssembly::GetThreadData() const
 {
    Int_t tid = TGeoManager::ThreadId();
    return *fThreadData[tid];
-}
+}*/
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -2912,7 +2913,7 @@ void TGeoVolumeAssembly::CreateThreadData(Int_t nthreads)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Int_t TGeoVolumeAssembly::GetCurrentNodeIndex() const
+/*Int_t TGeoVolumeAssembly::GetCurrentNodeIndex() const
 {
    return fThreadData[TGeoManager::ThreadId()]->fCurrent;
 }
@@ -2936,7 +2937,7 @@ void TGeoVolumeAssembly::SetCurrentNodeIndex(Int_t index)
 void TGeoVolumeAssembly::SetNextNodeIndex(Int_t index)
 {
    fThreadData[TGeoManager::ThreadId()]->fNext = index;
-}
+}*/
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor
@@ -2944,6 +2945,7 @@ void TGeoVolumeAssembly::SetNextNodeIndex(Int_t index)
 TGeoVolumeAssembly::TGeoVolumeAssembly() : TGeoVolume()
 {
    fThreadSize = 0;
+   fIndex = fgInstanceCount++;
    CreateThreadData(1);
 }
 
@@ -2959,6 +2961,7 @@ TGeoVolumeAssembly::TGeoVolumeAssembly(const char *name) : TGeoVolume()
    if (fGeoManager)
       fNumber = fGeoManager->AddVolume(this);
    fThreadSize = 0;
+   fIndex = fgInstanceCount++;
    CreateThreadData(1);
 }
 
