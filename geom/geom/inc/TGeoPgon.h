@@ -14,23 +14,46 @@
 
 #include "TGeoPcon.h"
 
+#include <atomic>
 #include <mutex>
 #include <vector>
 
 class TGeoPgon : public TGeoPcon {
+   static std::atomic<UInt_t> fgInstanceCount; //! source of dense per-object indices
+   UInt_t fIndex = fgInstanceCount++;          //! dense index of this shape into the per-thread data vector
+   mutable Int_t fGeneration = 0;              //! bumped whenever the thread data must be rebuilt
+
 public:
    struct ThreadData_t {
-      Int_t *fIntBuffer;    //![fNedges+4] temporary int buffer array
-      Double_t *fDblBuffer; //![fNedges+4] temporary double buffer array
+      Int_t *fIntBuffer = nullptr;    //![fNedges+4] temporary int buffer array
+      Double_t *fDblBuffer = nullptr; //![fNedges+4] temporary double buffer array
+      Int_t fInitGen = -1;            //! generation this slot was last initialized for
 
-      ThreadData_t();
+      ThreadData_t() = default;
       ~ThreadData_t();
+      // Owns the two scratch buffers: movable (so it can live in a resizable vector), not copyable.
+      ThreadData_t(ThreadData_t &&other) noexcept;
+      ThreadData_t &operator=(ThreadData_t &&other) noexcept;
+      ThreadData_t(const ThreadData_t &) = delete;
+      ThreadData_t &operator=(const ThreadData_t &) = delete;
    };
-   ThreadData_t &GetThreadData() const;
+
+   ThreadData_t &GetThreadData() const
+   {
+      thread_local std::vector<ThreadData_t> tdata;
+      if (tdata.size() <= fIndex)
+         tdata.resize(fgInstanceCount.load(std::memory_order_relaxed));
+      ThreadData_t &td = tdata[fIndex];
+      if (td.fInitGen != fGeneration)
+         InitThreadSlot(td);
+      return td;
+   }
    void ClearThreadData() const override;
    void CreateThreadData(Int_t nthreads) override;
 
 protected:
+   void InitThreadSlot(ThreadData_t &td) const;
+
    // data members
    Int_t fNedges;                                   // number of edges (at least one)
    mutable std::vector<ThreadData_t *> fThreadData; //! Navigation data per thread
@@ -115,7 +138,7 @@ public:
    void SetSegsAndPols(TBuffer3D &buff) const override;
    void Sizeof3D() const override;
 
-   ClassDefOverride(TGeoPgon, 1) // polygone class
+   ClassDefOverride(TGeoPgon, 2) // polygone class
 };
 
 #endif

@@ -14,24 +14,46 @@
 
 #include "TGeoBBox.h"
 
+#include <atomic>
 #include <mutex>
 #include <vector>
 
 class TGeoPolygon;
 
 class TGeoXtru : public TGeoBBox {
+   static std::atomic<UInt_t> fgInstanceCount; //! source of dense per-object indices
+   UInt_t fIndex = fgInstanceCount++;          //! dense index of this shape into the per-thread data vector
+   mutable Int_t fGeneration = 0;              //! bumped whenever the thread data must be rebuilt
+   mutable Bool_t fIllegalChecked = kFALSE;    //! illegal-polygon warning emitted once
+
 public:
    struct ThreadData_t {
-      Int_t fSeg;         // !current segment [0,fNvert-1]
-      Int_t fIz;          // !current z plane [0,fNz-1]
-      Double_t *fXc;      // ![fNvert] current X positions for polygon vertices
-      Double_t *fYc;      // ![fNvert] current Y positions for polygon vertices
-      TGeoPolygon *fPoly; // !polygon defining section shape
+      Int_t fSeg = 0;               // !current segment [0,fNvert-1]
+      Int_t fIz = 0;                // !current z plane [0,fNz-1]
+      Double_t *fXc = nullptr;      // ![fNvert] current X positions for polygon vertices
+      Double_t *fYc = nullptr;      // ![fNvert] current Y positions for polygon vertices
+      TGeoPolygon *fPoly = nullptr; // !polygon defining section shape
+      Int_t fInitGen = -1;          // !generation this slot was last initialized for
 
-      ThreadData_t();
+      ThreadData_t() = default;
       ~ThreadData_t();
+      // Owns fXc/fYc/fPoly: movable (so it can live in a resizable vector), not copyable.
+      ThreadData_t(ThreadData_t &&other) noexcept;
+      ThreadData_t &operator=(ThreadData_t &&other) noexcept;
+      ThreadData_t(const ThreadData_t &) = delete;
+      ThreadData_t &operator=(const ThreadData_t &) = delete;
    };
-   ThreadData_t &GetThreadData() const;
+
+   ThreadData_t &GetThreadData() const
+   {
+      thread_local std::vector<ThreadData_t> tdata;
+      if (tdata.size() <= fIndex)
+         tdata.resize(fgInstanceCount.load(std::memory_order_relaxed));
+      ThreadData_t &td = tdata[fIndex];
+      if (td.fInitGen != fGeneration)
+         InitThreadSlot(td);
+      return td;
+   }
    void ClearThreadData() const override;
    void CreateThreadData(Int_t nthreads) override;
 
@@ -55,6 +77,7 @@ protected:
    TGeoXtru &operator=(const TGeoXtru &) = delete;
 
    // methods
+   void InitThreadSlot(ThreadData_t &td) const;
    Double_t
    DistToPlane(const Double_t *point, const Double_t *dir, Int_t iz, Int_t ivert, Double_t stepmax, Bool_t in) const;
    void GetPlaneVertices(Int_t iz, Int_t ivert, Double_t *vert) const;
@@ -118,7 +141,7 @@ public:
    void SetSegsAndPols(TBuffer3D &buff) const override;
    void Sizeof3D() const override;
 
-   ClassDefOverride(TGeoXtru, 3) // extruded polygon class
+   ClassDefOverride(TGeoXtru, 4) // extruded polygon class
 };
 
 #endif

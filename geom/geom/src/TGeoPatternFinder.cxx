@@ -51,56 +51,35 @@ ClassImp(TGeoPatternSphTheta);
 ClassImp(TGeoPatternSphPhi);
 ClassImp(TGeoPatternHoneycomb);
 
-////////////////////////////////////////////////////////////////////////////////
-/// Constructor.
-
-TGeoPatternFinder::ThreadData_t::ThreadData_t() : fMatrix(nullptr), fCurrent(-1), fNextIndex(-1) {}
+std::atomic<UInt_t> TGeoPatternFinder::fgInstanceCount = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Destructor.
+/// (Re)build the per-thread scratch state for this finder into the given slot.
+/// Cold path: runs once per (thread, finder, generation). The matrix is created
+/// through the virtual CreateMatrix() and is owned by the geometry manager.
 
-TGeoPatternFinder::ThreadData_t::~ThreadData_t()
+void TGeoPatternFinder::InitThreadSlot(ThreadData_t &td) const
 {
-   //   if (fMatrix != gGeoIdentity) delete fMatrix;
+   td.fMatrix = CreateMatrix();
+   td.fCurrent = -1;
+   td.fNextIndex = -1;
+   td.fInitGen = fGeneration;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-TGeoPatternFinder::ThreadData_t &TGeoPatternFinder::GetThreadData() const
-{
-   Int_t tid = TGeoManager::ThreadId();
-   return *fThreadData[tid];
-}
-
-////////////////////////////////////////////////////////////////////////////////
+/// Invalidate the per-thread data. Each thread lazily rebuilds its own slot on
+/// next access; no cross-thread reach-in is needed.
 
 void TGeoPatternFinder::ClearThreadData() const
 {
-   std::lock_guard<std::mutex> guard(fMutex);
-   std::vector<ThreadData_t *>::iterator i = fThreadData.begin();
-   while (i != fThreadData.end()) {
-      delete *i;
-      ++i;
-   }
-   fThreadData.clear();
-   fThreadSize = 0;
+   ++fGeneration;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Create thread data for n threads max.
+/// No-op: per-thread data is allocated lazily and indexed by thread_local storage,
+/// so no provisioning for a fixed number of threads is required.
 
-void TGeoPatternFinder::CreateThreadData(Int_t nthreads)
-{
-   std::lock_guard<std::mutex> guard(fMutex);
-   fThreadData.resize(nthreads);
-   fThreadSize = nthreads;
-   for (Int_t tid = 0; tid < nthreads; tid++) {
-      if (fThreadData[tid] == nullptr) {
-         fThreadData[tid] = new ThreadData_t;
-         fThreadData[tid]->fMatrix = CreateMatrix();
-      }
-   }
-}
+void TGeoPatternFinder::CreateThreadData(Int_t) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor

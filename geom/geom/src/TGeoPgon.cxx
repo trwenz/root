@@ -68,10 +68,7 @@ polygons, between `phi1` and `phi1+dphi.`
 
 ClassImp(TGeoPgon);
 
-////////////////////////////////////////////////////////////////////////////////
-/// Constructor.
-
-TGeoPgon::ThreadData_t::ThreadData_t() : fIntBuffer(nullptr), fDblBuffer(nullptr) {}
+std::atomic<UInt_t> TGeoPgon::fgInstanceCount = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Destructor.
@@ -83,45 +80,61 @@ TGeoPgon::ThreadData_t::~ThreadData_t()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Move constructor. Steals the owned buffers; the moved-from slot is left empty
+/// and uninitialized (fInitGen = -1).
 
-TGeoPgon::ThreadData_t &TGeoPgon::GetThreadData() const
+TGeoPgon::ThreadData_t::ThreadData_t(ThreadData_t &&other) noexcept
+   : fIntBuffer(other.fIntBuffer), fDblBuffer(other.fDblBuffer), fInitGen(other.fInitGen)
 {
-   Int_t tid = TGeoManager::ThreadId();
-   return *fThreadData[tid];
+   other.fIntBuffer = nullptr;
+   other.fDblBuffer = nullptr;
+   other.fInitGen = -1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Move assignment. Releases the current buffers before stealing the source's.
+
+TGeoPgon::ThreadData_t &TGeoPgon::ThreadData_t::operator=(ThreadData_t &&other) noexcept
+{
+   if (this != &other) {
+      delete[] fIntBuffer;
+      delete[] fDblBuffer;
+      fIntBuffer = other.fIntBuffer;
+      fDblBuffer = other.fDblBuffer;
+      fInitGen = other.fInitGen;
+      other.fIntBuffer = nullptr;
+      other.fDblBuffer = nullptr;
+      other.fInitGen = -1;
+   }
+   return *this;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// (Re)build the per-thread scratch buffers for this shape into the given slot.
+/// Cold path: runs once per (thread, shape, generation).
+
+void TGeoPgon::InitThreadSlot(ThreadData_t &td) const
+{
+   td = ThreadData_t{}; // release any buffers from a previous generation
+   td.fIntBuffer = new Int_t[fNedges + 10];
+   td.fDblBuffer = new Double_t[fNedges + 10];
+   td.fInitGen = fGeneration;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Invalidate the per-thread data. Each thread lazily rebuilds its own slot on
+/// next access; no cross-thread reach-in is needed.
 
 void TGeoPgon::ClearThreadData() const
 {
-   std::lock_guard<std::mutex> guard(fMutex);
-   std::vector<ThreadData_t *>::iterator i = fThreadData.begin();
-   while (i != fThreadData.end()) {
-      delete *i;
-      ++i;
-   }
-   fThreadData.clear();
-   fThreadSize = 0;
+   ++fGeneration;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Create thread data for n threads max.
+/// No-op: per-thread data is allocated lazily and indexed by thread_local storage,
+/// so no provisioning for a fixed number of threads is required.
 
-void TGeoPgon::CreateThreadData(Int_t nthreads)
-{
-   if (fThreadSize)
-      ClearThreadData();
-   std::lock_guard<std::mutex> guard(fMutex);
-   fThreadData.resize(nthreads);
-   fThreadSize = nthreads;
-   for (Int_t tid = 0; tid < nthreads; tid++) {
-      if (fThreadData[tid] == nullptr) {
-         fThreadData[tid] = new ThreadData_t;
-         fThreadData[tid]->fIntBuffer = new Int_t[fNedges + 10];
-         fThreadData[tid]->fDblBuffer = new Double_t[fNedges + 10];
-      }
-   }
-}
+void TGeoPgon::CreateThreadData(Int_t) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// dummy ctor
@@ -467,8 +480,6 @@ TGeoPgon::DistFromInside(const Double_t *point, const Double_t *dir, Int_t iact,
       ipl++;
    }
    Double_t stepmax = step;
-   if (!fThreadSize)
-      ((TGeoPgon *)this)->CreateThreadData(1);
    ThreadData_t &td = GetThreadData();
    Double_t *sph = td.fDblBuffer;
    Int_t *iph = td.fIntBuffer;
@@ -1254,8 +1265,6 @@ TGeoPgon::DistFromOutside(const Double_t *point, const Double_t *dir, Int_t iact
          }
       }
    }
-   if (!fThreadSize)
-      ((TGeoPgon *)this)->CreateThreadData(1);
    ThreadData_t &td = GetThreadData();
    Double_t *sph = td.fDblBuffer;
    Int_t *iph = td.fIntBuffer;

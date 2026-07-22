@@ -14,6 +14,7 @@
 
 #include "TObject.h"
 
+#include <atomic>
 #include <mutex>
 #include <vector>
 
@@ -23,24 +24,37 @@ class TGeoMatrix;
 
 /// base finder class for patterns. A pattern is specifying a division type
 class TGeoPatternFinder : public TObject {
+   static std::atomic<UInt_t> fgInstanceCount; //! source of dense per-object indices
+   UInt_t fIndex = fgInstanceCount++;          //! dense index of this finder into the per-thread data vector
+   mutable Int_t fGeneration = 0;              //! bumped whenever the thread data must be rebuilt
+
 public:
    struct ThreadData_t {
-      TGeoMatrix *fMatrix; //! generic matrix
-      Int_t fCurrent;      //! current division element
-      Int_t fNextIndex;    //! index of next node
-
-      ThreadData_t();
-      ~ThreadData_t();
-
-   private:
-      ThreadData_t(const ThreadData_t &) = delete;
-      ThreadData_t &operator=(const ThreadData_t &) = delete;
+      // fMatrix is created via the virtual CreateMatrix() and registered with (owned by)
+      // the geometry manager, so this struct does not own it. All members are trivially
+      // movable, which lets the slot live in a resizable thread_local vector.
+      TGeoMatrix *fMatrix = nullptr; //! generic matrix (owned by TGeoManager)
+      Int_t fCurrent = -1;           //! current division element
+      Int_t fNextIndex = -1;         //! index of next node
+      Int_t fInitGen = -1;           //! generation this slot was last initialized for
    };
-   ThreadData_t &GetThreadData() const;
+
+   ThreadData_t &GetThreadData() const
+   {
+      thread_local std::vector<ThreadData_t> tdata;
+      if (tdata.size() <= fIndex)
+         tdata.resize(fgInstanceCount.load(std::memory_order_relaxed));
+      ThreadData_t &td = tdata[fIndex];
+      if (td.fInitGen != fGeneration)
+         InitThreadSlot(td);
+      return td;
+   }
    void ClearThreadData() const;
    void CreateThreadData(Int_t nthreads);
 
 protected:
+   void InitThreadSlot(ThreadData_t &td) const;
+
    enum EGeoPatternFlags { kPatternReflected = BIT(14), kPatternSpacedOut = BIT(15) };
    Double_t fStep;      // division step length
    Double_t fStart;     // starting point on divided axis
@@ -92,7 +106,7 @@ public:
    void SetVolume(TGeoVolume *vol) { fVolume = vol; }
    virtual void UpdateMatrix(Int_t, TGeoHMatrix &) const {}
 
-   ClassDefOverride(TGeoPatternFinder, 4) // patterns to divide volumes
+   ClassDefOverride(TGeoPatternFinder, 5) // patterns to divide volumes
 };
 
 /// a X axis divison pattern
