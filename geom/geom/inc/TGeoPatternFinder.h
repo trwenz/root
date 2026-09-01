@@ -60,6 +60,8 @@ public:
 
 protected:
    void InitThreadSlot(ThreadData_t &td) const;
+   TGeoManager *GetOwnerManager() const { return fVolume ? fVolume->GetGeoManager() : nullptr; }
+   TGeoMatrix *GetOwnerIdentity() const;
 
    enum EGeoPatternFlags { kPatternReflected = BIT(14), kPatternSpacedOut = BIT(15) };
    Double_t fStep;      // division step length

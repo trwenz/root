@@ -29,6 +29,7 @@ const Double_t kIdentityMatrix[3 * 3] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,
 const Double_t kUnitScale[3] = {1.0, 1.0, 1.0};
 
 class TGeoHMatrix;
+class TGeoManager;
 
 ////////////////////////////////////////////////////////////////////////////
 //                                                                        //
@@ -96,6 +97,9 @@ public:
    virtual void ReflectY(Bool_t leftside, Bool_t rotonly = kFALSE);
    virtual void ReflectZ(Bool_t leftside, Bool_t rotonly = kFALSE);
    virtual void RegisterYourself();
+   /// Register this matrix with an explicit owning geometry manager.
+   /// \param manager Geometry manager that takes ownership of the matrix.
+   void RegisterYourself(TGeoManager *manager);
    void SetDefaultName();
    virtual void SetDx(Double_t) {}
    virtual void SetDy(Double_t) {}
@@ -341,6 +345,9 @@ public:
    TGeoMatrix *MakeClone() const override;
    void Multiply(const TGeoMatrix *right);
    void RegisterYourself() override;
+   /// Register this matrix and its rotation with an explicit owning geometry manager.
+   /// \param manager Geometry manager that takes ownership of the transformations.
+   void RegisterYourself(TGeoManager *manager);
    void RotateX(Double_t angle) override;
    void RotateY(Double_t angle) override;
    void RotateZ(Double_t angle) override;

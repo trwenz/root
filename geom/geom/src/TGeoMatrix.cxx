@@ -539,12 +539,20 @@ void TGeoMatrix::ReflectZ(Bool_t, Bool_t) {}
 
 void TGeoMatrix::RegisterYourself()
 {
-   if (!gGeoManager) {
+   RegisterYourself(gGeoManager);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Register the matrix in the given manager, which will become the owner.
+
+void TGeoMatrix::RegisterYourself(TGeoManager *manager)
+{
+   if (!manager) {
       Warning("RegisterYourself", "cannot register without geometry");
       return;
    }
    if (!IsRegistered()) {
-      gGeoManager->RegisterMatrix(this);
+      manager->RegisterMatrix(this);
       SetBit(kGeoRegistered);
    }
 }
@@ -1940,9 +1948,17 @@ void TGeoCombiTrans::Multiply(const TGeoMatrix *right)
 
 void TGeoCombiTrans::RegisterYourself()
 {
-   TGeoMatrix::RegisterYourself();
-   if (fRotation && fRotation->IsRotation())
-      fRotation->RegisterYourself();
+   RegisterYourself(gGeoManager);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Register the matrix and its rotation in the given manager.
+
+void TGeoCombiTrans::RegisterYourself(TGeoManager *manager)
+{
+   TGeoMatrix::RegisterYourself(manager);
+   if (manager && fRotation && fRotation->IsRotation())
+      fRotation->RegisterYourself(manager);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
