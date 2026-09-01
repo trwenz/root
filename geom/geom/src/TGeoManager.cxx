@@ -976,7 +976,9 @@ void TGeoManager::RemoveNavigator(const TGeoNavigator *nav)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Set maximum number of threads for navigation.
+/// Enable multi-threaded navigation for at most `nthreads` worker threads.
+/// This is still required to make navigator registration and manager state thread-safe;
+/// lazy scratch-data allocation does not replace this setup.
 
 void TGeoManager::SetMaxThreads(Int_t nthreads)
 {
